@@ -39,8 +39,8 @@ internal static class Program
                "actual BD790i APOB offsets and clocks confirm two channels by two P-states");
 
         int states = InferAt(memClks, active, ownerOffsets, 2);
-        Expect(ownerOffsets[1] - ownerOffsets[0] == 0x164
-            && ownerOffsets[3] - ownerOffsets[2] == 0x164, 1,
+        Expect((ownerOffsets[1] - ownerOffsets[0] == 0x164
+            && ownerOffsets[3] - ownerOffsets[2] == 0x164) ? 1 : 0, 1,
             "both physical channels share the observed 0x164 P-state stride");
         Expect(0 / states, 0, "block 0 is physical Ch A");
         Expect(1 / states, 0, "block 1 remains physical Ch A, P1");
