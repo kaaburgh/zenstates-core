@@ -10,7 +10,7 @@ namespace ZenStates.Core.Hardware.Apob
     /// alone: some desktop AGESA versions store multiple memory P-states per
     /// physical channel without publishing a fixed P-state stride.
     /// </summary>
-    public static class ApobTimingBlockGrouping
+    internal static class ApobTimingBlockGrouping
     {
         /// <summary>
         /// Returns the number of P-state records per physical channel, or zero
