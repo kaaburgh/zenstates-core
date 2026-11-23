@@ -627,8 +627,12 @@ namespace ZenStates.Core.Hardware.Apob
                     ApobBytes.IsEntry(extended, 0, timingLayout.SourceGroupId, timingLayout.SourceDataTypeId))
                 {
                     ChannelTimings = ApobChannelTimings.Read(extended, 0, timingLayout);
+                    // Read extended records using their original physical APOB offsets:
+                    // the inferred grouping changes only channel/P-state labels,
+                    // never the source of the ODT/drive-strength values.
                     ReadChannelExtendedData(extended, timingLayout);
                     MarkActiveChannelTimings(timingsOverride);
+                    InferDesktopPStateGroups(timingLayout);
                     MapChannelsToDimms();
                 }
             }
@@ -685,6 +689,40 @@ namespace ZenStates.Core.Hardware.Apob
             catch (Exception ex)
             {
                 Debug.WriteLine($"APOB active timings: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// GEN type-3 may contain several training/P-state records per physical
+        /// channel even on Zen 4 desktop systems. Unlike the APU layouts, these
+        /// versions do not publish a known P-state stride. Reconcile labels only
+        /// when independent MEM type-25 channel records and repeated clock/active
+        /// sequences establish the grouping. Otherwise keep the parser's labels.
+        /// </summary>
+        private void InferDesktopPStateGroups(ApobChannelTimingLayout layout)
+        {
+            if (layout == null || layout.PStateBlockStride != 0 || ActiveMemClk == 0
+                || ChannelData == null || ChannelData.Count < 2
+                || ChannelTimings == null || ChannelTimings.Count == 0)
+                return;
+
+            var clocks = new List<uint>(ChannelTimings.Count);
+            var active = new List<bool>(ChannelTimings.Count);
+            foreach (ApobChannelTimings block in ChannelTimings)
+            {
+                clocks.Add(block.MemClk);
+                active.Add(block.IsActive);
+            }
+
+            int states = ApobTimingBlockGrouping.InferStatesPerChannel(
+                clocks, active, ChannelData.Count);
+            if (states == 0)
+                return;
+
+            for (int i = 0; i < ChannelTimings.Count; i++)
+            {
+                ChannelTimings[i].Channel = i / states;
+                ChannelTimings[i].PState = i % states;
             }
         }
 
