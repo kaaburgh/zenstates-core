@@ -708,14 +708,16 @@ namespace ZenStates.Core.Hardware.Apob
 
             var clocks = new List<uint>(ChannelTimings.Count);
             var active = new List<bool>(ChannelTimings.Count);
+            var offsets = new List<uint>(ChannelTimings.Count);
             foreach (ApobChannelTimings block in ChannelTimings)
             {
                 clocks.Add(block.MemClk);
                 active.Add(block.IsActive);
+                offsets.Add(block.EntryRelativeOffset);
             }
 
             int states = ApobTimingBlockGrouping.InferStatesPerChannel(
-                clocks, active, ChannelData.Count);
+                clocks, active, offsets, ChannelData.Count);
             if (states == 0)
                 return;
 
