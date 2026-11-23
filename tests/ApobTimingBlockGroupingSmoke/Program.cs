@@ -8,7 +8,17 @@ internal static class Program
 
     private static int Infer(uint[] clocks, bool[] active, int channels)
     {
-        return ApobTimingBlockGrouping.InferStatesPerChannel(clocks, active, channels);
+        if (clocks == null)
+            return ApobTimingBlockGrouping.InferStatesPerChannel(null, active, null, channels);
+        var offsets = new uint[clocks.Length];
+        for (int i = 0; i < offsets.Length; i++)
+            offsets[i] = (uint)(0x100 + i * 0x164);
+        return ApobTimingBlockGrouping.InferStatesPerChannel(clocks, active, offsets, channels);
+    }
+
+    private static int InferAt(uint[] clocks, bool[] active, uint[] offsets, int channels)
+    {
+        return ApobTimingBlockGrouping.InferStatesPerChannel(clocks, active, offsets, channels);
     }
 
     private static void Expect(int actual, int expected, string scenario)
@@ -24,9 +34,14 @@ internal static class Program
         // GEN timings has four records [3000,1600] x 2, with P0 active.
         var memClks = new uint[] { 3000, 1600, 3000, 1600 };
         var active = new bool[] { true, false, true, false };
-        Expect(Infer(memClks, active, 2), 2, "Zen4 desktop two channels by two P-states");
+        var ownerOffsets = new uint[] { 0x660, 0x7C4, 0xE00, 0xF64 };
+        Expect(InferAt(memClks, active, ownerOffsets, 2), 2,
+               "actual BD790i APOB offsets and clocks confirm two channels by two P-states");
 
-        int states = Infer(memClks, active, 2);
+        int states = InferAt(memClks, active, ownerOffsets, 2);
+        Expect(ownerOffsets[1] - ownerOffsets[0] == 0x164
+            && ownerOffsets[3] - ownerOffsets[2] == 0x164, 1,
+            "both physical channels share the observed 0x164 P-state stride");
         Expect(0 / states, 0, "block 0 is physical Ch A");
         Expect(1 / states, 0, "block 1 remains physical Ch A, P1");
         Expect(2 / states, 1, "block 2 is physical Ch B, P0");
@@ -53,6 +68,17 @@ internal static class Program
                0, "equal clocks cannot distinguish P-states from channels");
         Expect(Infer(new uint[] { 1600, 3000, 1600, 3000 }, active, 2),
                0, "ascending order rejected");
+        Expect(InferAt(memClks, active,
+                        new uint[] { 0x660, 0x7C4, 0xE00, 0xF66 }, 2),
+               0, "mismatched P-state record offsets across channels rejected");
+        Expect(InferAt(memClks, active,
+                        new uint[] { 0x660, 0x7C4, 0x600, 0xF64 }, 2),
+               0, "non-monotonic GEN timing block offsets rejected");
+        Expect(InferAt(memClks, active, null, 2),
+               0, "missing offsets fail closed");
+        Expect(InferAt(memClks, active,
+                        new uint[] { 0x660 }, 2),
+               0, "misaligned offset array fails closed");
         Expect(Infer(memClks, new bool[] { true, false, false, false }, 2),
                0, "incomplete active-channel evidence rejected");
         Expect(Infer(memClks, new bool[] { true, true, true, true }, 2),
