@@ -18,9 +18,11 @@ namespace ZenStates.Core.Hardware.Apob
         /// modified; callers retain the original per-block data and offsets.
         /// </summary>
         public static int InferStatesPerChannel(
-            IList<uint> memClks, IList<bool> active, int physicalChannelCount)
+            IList<uint> memClks, IList<bool> active, IList<uint> offsets,
+            int physicalChannelCount)
         {
-            if (memClks == null || active == null || memClks.Count != active.Count
+            if (memClks == null || active == null || offsets == null
+                || memClks.Count != active.Count || memClks.Count != offsets.Count
                 || physicalChannelCount < 2 || memClks.Count <= physicalChannelCount
                 || memClks.Count % physicalChannelCount != 0)
                 return 0;
@@ -57,12 +59,23 @@ namespace ZenStates.Core.Hardware.Apob
             if (!differentSpeeds || activeInFirstGroup != 1)
                 return 0;
 
+            // The GEN block offsets must be increasing and each channel must
+            // repeat *the same intra-channel offset pattern*. On BD790i this
+            // is [0x660, 0x7C4] and [0xE00, 0xF64]: both states are 0x164 apart.
+            // Do not infer groups from clock values alone.
+            for (int i = 1; i < offsets.Count; i++)
+                if (offsets[i] <= offsets[i - 1])
+                    return 0;
+
             for (int channel = 1; channel < physicalChannelCount; channel++)
             {
+                int baseIndex = channel * states;
                 for (int state = 0; state < states; state++)
                 {
-                    int i = channel * states + state;
+                    int i = baseIndex + state;
                     if (memClks[i] != memClks[state] || active[i] != active[state])
+                        return 0;
+                    if (offsets[i] - offsets[baseIndex] != offsets[state] - offsets[0])
                         return 0;
                 }
             }
